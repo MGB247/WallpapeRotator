@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Wallpape R Otator</title>
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="script-src 'self' 'unsafe-inline';"
+    />
+  </head>
+  <body style="background: #333">
+    <div style="width: 100%; height: 100%">
+      <h2 style="margin-left: 15px">Select Wallpapers to Rotate</h2>
+      <button
+        style="
+          background-color: #5c5;
+          border-radius: 10px;
+          height: 30px;
+          width: 100px;
+          outline: none;
+          border: none;
+          margin-left: 15px;
+        "
+        onclick="selectWallpapers()"
+      >
+        Select
+      </button>
+    </div>
+    <div
+      id="selectedWallpaperContainer"
+      style="
+        width: 100%;
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        margin: 10px;
+        overflow-y: hidden;
+        overflow-x: auto;
+      "
+    ></div>
+    <button
+      style="
+        background-color: #5c5;
+        border-radius: 10px;
+        height: 30px;
+        width: 100px;
+        outline: none;
+        border: none;
+        margin-left: 15px;
+      "
+      onclick="startPlaylist()"
+    >
+      Start Playlist
+    </button>
+  </body>
+</html>
+
+<style>
+  h2,
+  button {
+    color: white;
+  }
+  button {
+    cursor: pointer;
+  }
+  ::-webkit-scrollbar {
+    display: none;
+  }
+</style>
+
+<script>
+  var selectedWallpapers = [];
+  const { remote } = require("electron");
+  const wallpaperModule = require("wallpaper");
+
+  const selectWallpapers = async () => {
+    let wallpapers = await remote.dialog.showOpenDialog({
+      title: "Select Wallpapers",
+      filters: [{ name: "Images", extensions: ["jpg", "png", "jpeg"] }],
+      properties: ["openFile", "multiSelections"],
+    });
+    console.log(wallpapers);
+
+    let selectedWallpaperContainer = document.getElementById(
+      "selectedWallpaperContainer"
+    );
+    if (selectedWallpaperContainer) {
+      wallpapers?.filePaths.forEach((wallpaper, index) => {
+        if (
+          selectedWallpapers.findIndex(
+            (wall) => wall.filePath === wallpaper
+          ) === -1
+        ) {
+          let parentDiv = document.createElement("div");
+          parentDiv.setAttribute(
+            "style",
+            "display: flex; flex-direction: column; justify-content: center; align-items: center"
+          );
+          parentDiv.setAttribute("id", `wallpaper${wallpaper}${index}`);
+
+          let timeSelector = document.createElement("input");
+          timeSelector.setAttribute("type", "number");
+          timeSelector.setAttribute("placeholder", "Hours to play");
+          timeSelector.setAttribute("min", "0");
+          timeSelector.setAttribute("onchange", "selectTime(event)");
+          timeSelector.setAttribute("style", "margin: 5px; width: 100px");
+
+          let removeButton = document.createElement("button");
+          removeButton.setAttribute("onclick", "removeWallpaper(event)");
+          removeButton.setAttribute(
+            "style",
+            "background-color: red;border-radius: 10px;height: 25px;width: 80px;outline: none;border: none;align-self: center"
+          );
+          removeButton.textContent = "Remove";
+
+          let selectAsCurrent = document.createElement("button");
+          selectAsCurrent.setAttribute("onclick", "selectAsCurrent(event)");
+          selectAsCurrent.setAttribute(
+            "style",
+            "background-color: #5c5;border-radius: 10px;height: 25px;width: 80px;outline: none;border: none;align-self: center; margin: 5px"
+          );
+          selectAsCurrent.textContent = "Play";
+
+          let img = document.createElement("img");
+          img.setAttribute("src", wallpaper);
+          img.width = "150px";
+          img.height = "150px";
+          img.setAttribute(
+            "style",
+            "height: 150px; width: 150px; border-radius: 10px; margin: 5px"
+          );
+
+          parentDiv.appendChild(img);
+          parentDiv.appendChild(timeSelector);
+          parentDiv.appendChild(selectAsCurrent);
+          parentDiv.appendChild(removeButton);
+          selectedWallpaperContainer.appendChild(parentDiv);
+
+          selectedWallpapers.push({
+            filePath: wallpaper,
+            selector: `wallpaper${wallpaper}${index}`,
+            time: 0,
+          });
+        }
+      });
+    }
+  };
+
+  const selectTime = (event) => {
+    selectedWallpapers.forEach((wall, index) => {
+      if (wall.selector === event.target.parentElement?.id) {
+        selectedWallpapers[index].time = event.target.value;
+      }
+    });
+    console.log(selectedWallpapers);
+  };
+
+  const selectAsCurrent = async (event) => {
+    let wallpaper = selectedWallpapers.filter(
+      (wall) => wall.selector === event.target.parentElement?.id
+    )[0];
+
+    if (wallpaper) {
+      await wallpaperModule.set(wallpaper.filePath);
+    }
+  };
+
+  const removeWallpaper = (event) => {
+    let index = selectedWallpapers.findIndex(
+      (wall) => wall.selector === event.target.parentElement?.id
+    );
+    let selectedWallpaperContainer = document.getElementById(
+      "selectedWallpaperContainer"
+    );
+    let child = document.getElementById(event.target.parentElement?.id);
+    if (index > -1 && selectedWallpaperContainer && child) {
+      selectedWallpapers.splice(index, 1);
+      selectedWallpaperContainer.removeChild(child);
+    }
+  };
+
+  const startPlaylist = async () => {
+    if (selectedWallpapers.length === 1) {
+      await wallpaperModule.set(selectedWallpapers[0].filePath);
+    }
+    if (selectedWallpapers.length > 1) {
+      await wallpaperModule.set(selectedWallpapers[0].filePath);
+
+      let currentTime = Date.now();
+      for (let i = 1; i < selectedWallpapers.length; i++) {
+        if (selectedWallpapers[i].time != 0) {
+          setTimeout(async () => {
+            await wallpaperModule.set(selectedWallpapers[i].filePath);
+          }, getSumTime(i) * 60 * 60 * 1000);
+        }
+      }
+
+      remote.BrowserWindow.getFocusedWindow().minimize();
+    }
+  };
+
+  const getSumTime = (index) => {
+    let sum = 0;
+    for (let i = 0; i < index; i++) {
+      sum += parseInt(selectedWallpapers[i].time);
+    }
+    return sum;
+  };
+</script>
